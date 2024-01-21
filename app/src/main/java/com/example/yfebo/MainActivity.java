@@ -46,12 +46,12 @@ public class MainActivity extends AppCompatActivity {
 
     final static int PERMISSION_REQUEST_CODE = 1;
     boolean allPermissionsGranted = false;
-//    final static int MY_PERMISSIONS_INTERNET = 1;
     public String cityName = "";
     TextView tmpText;
     TextView conditionText;
-
     Context context;
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -67,10 +67,10 @@ public class MainActivity extends AppCompatActivity {
         locateButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                //Si le EditText est vide ou toujours avec son placeholder, utilise la géolocalisation
                 if (cityText.getText().toString().equals("") || cityText.getText().toString().equals("Ta ville ici"))
                 {
                 cityName = clickLocate(view);
-                Log.v("YYfebo", "city = " + cityName);
                 cityText.setText(cityName);
                 request(cityName);
                 } else { request(cityText.getText().toString());}
@@ -81,27 +81,33 @@ public class MainActivity extends AppCompatActivity {
     public void request(String city) {
         String url = "https://www.prevision-meteo.ch/services/json/" + city;
         RequestQueue queue = Volley.newRequestQueue(context);
-
+        //Requête API vers prevision-meteo
+        // IMPORTANT : prevision-meteo ne fonctionne que en France, Belgique et Suisse
+        // Si la ville requêtée est en dehors de ces territoires, le programme renverra une erreur
+        // (Mountain View, la ville de base de l'émulateur Android Studio par exemple)
         StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
                 new Response.Listener<String>() {
                     @Override
                     public void onResponse(String response) {
-
+                        TextView tmpText = findViewById(R.id.textTmp);
+                        TextView conditionText = findViewById(R.id.textCondition);
                         try {
                             JSONObject jObj = new JSONObject(response);
-                            Log.v("YYfebo", response);
                             JSONObject jObjCurrent = jObj.getJSONObject("current_condition");
+                            Log.v("YYFEBO", jObjCurrent.getString("tmp"));
+                            //Get Température, Condition et Logo météo
                             String tmp = jObjCurrent.getString("tmp");
                             String condition = jObjCurrent.getString("condition");
                             String icon = jObjCurrent.getString("icon");
-                            TextView tmpText = findViewById(R.id.textTmp);
-                            TextView conditionText = findViewById(R.id.textCondition);
+
                             conditionText.setText(condition);
                             tmpText.setText(tmp + " C°");
                             ImageView imageView = findViewById(R.id.imageView);
                             imageView.setVisibility(View.VISIBLE);
                             Picasso.get().load(icon).into(imageView);
                         } catch (JSONException e) {
+                            tmpText.setText("An error occured");
+                            conditionText.setText("Invalid City name: \n" + city);
                             e.printStackTrace();
                         }
                     }
@@ -116,19 +122,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public String clickLocate(View v) {
-        Log.v("YYfebo", "ClickLocate");
         //Check for permissions and request them if they are Denied
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
         || ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) != PackageManager.PERMISSION_GRANTED)
         {
-            Log.v("YYfebo", "inside");
             String[] permissions = {
                     Manifest.permission.INTERNET,
                     Manifest.permission.ACCESS_COARSE_LOCATION
             };
             ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
         } else { allPermissionsGranted = true; }
-        Log.v("YYfebo", "Permissions Granted == " + allPermissionsGranted);
         if (allPermissionsGranted) { locate(); }
         return cityName;
     }
@@ -153,13 +156,11 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("MissingPermission")
     private void locate() {
-        Log.v("YYfebo", "Locate");
         fusedLocationClient.getCurrentLocation(PRIORITY_LOW_POWER, null)
                 .addOnSuccessListener(this, new OnSuccessListener<Location>() {
                     @Override
                     public void onSuccess(Location location) {
                         if (location != null) {
-                            Log.v("YYfebo", "Location GET " + location);
                             Geocoder geocoder = new Geocoder(context, Locale.getDefault());
                             try {
                                 List<Address> addresses = geocoder.getFromLocation(
@@ -172,16 +173,18 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    @SuppressLint("MissingSuperCall")
     @Override
     public void onBackPressed() {
+        //Confirme la fin de l'application si le bouton back est pressé
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setMessage("Are you sure you want to exit?");
-        builder.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+        builder.setMessage("Voulez-vous quitter l'application ?");
+        builder.setPositiveButton("Oui", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) { dialog.dismiss(); finish(); }
         });
 
-        builder.setNegativeButton("No", new DialogInterface.OnClickListener() {
+        builder.setNegativeButton("Non", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) { dialog.dismiss(); }
         });

@@ -4,7 +4,9 @@ import static com.google.android.gms.location.Priority.PRIORITY_LOW_POWER;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Geocoder;
@@ -42,7 +44,9 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity {
     private FusedLocationProviderClient fusedLocationClient;
 
-    final static int MY_PERMISSIONS_REQUEST_COARSE_LOCATE = 35;
+    final static int PERMISSION_REQUEST_CODE = 1;
+    boolean allPermissionsGranted = false;
+//    final static int MY_PERMISSIONS_INTERNET = 1;
     public String cityName = "";
     TextView tmpText;
     TextView conditionText;
@@ -54,15 +58,22 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         Button locateButton = findViewById(R.id.locateButton);
+        ImageView imageView = findViewById(R.id.imageView);
         EditText cityText = findViewById(R.id.cityText);
         TextView tmpText = findViewById(R.id.textTmp);
         TextView conditionText = findViewById(R.id.textCondition);
+
         context = getApplicationContext();
         locateButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                cityText.setText(clickLocate(view));
-                request(cityText.toString());
+                if (cityText.getText().toString().equals("") || cityText.getText().toString().equals("Ta ville ici"))
+                {
+                cityName = clickLocate(view);
+                Log.v("YYfebo", "city = " + cityName);
+                cityText.setText(cityName);
+                request(cityName);
+                } else { request(cityText.getText().toString());}
             }
         });
     }
@@ -78,14 +89,17 @@ public class MainActivity extends AppCompatActivity {
 
                         try {
                             JSONObject jObj = new JSONObject(response);
+                            Log.v("YYfebo", response);
                             JSONObject jObjCurrent = jObj.getJSONObject("current_condition");
                             String tmp = jObjCurrent.getString("tmp");
                             String condition = jObjCurrent.getString("condition");
                             String icon = jObjCurrent.getString("icon");
-
-                            conditionText.setText("Condition :" + condition);
-                            tmpText.setText("Température :" + tmp);
+                            TextView tmpText = findViewById(R.id.textTmp);
+                            TextView conditionText = findViewById(R.id.textCondition);
+                            conditionText.setText(condition);
+                            tmpText.setText(tmp + " C°");
                             ImageView imageView = findViewById(R.id.imageView);
+                            imageView.setVisibility(View.VISIBLE);
                             Picasso.get().load(icon).into(imageView);
                         } catch (JSONException e) {
                             e.printStackTrace();
@@ -102,52 +116,77 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public String clickLocate(View v) {
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
-                    MY_PERMISSIONS_REQUEST_COARSE_LOCATE);
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET))
-        } else {
-            locate();
-            if (cityName != "") { return cityName; }
-        }
-        return "";
+        Log.v("YYfebo", "ClickLocate");
+        //Check for permissions and request them if they are Denied
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        || ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) != PackageManager.PERMISSION_GRANTED)
+        {
+            Log.v("YYfebo", "inside");
+            String[] permissions = {
+                    Manifest.permission.INTERNET,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+            };
+            ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
+        } else { allPermissionsGranted = true; }
+        Log.v("YYfebo", "Permissions Granted == " + allPermissionsGranted);
+        if (allPermissionsGranted) { locate(); }
+        return cityName;
     }
+
 
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String[] permissions, int[] grantResults) {
 
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        if (requestCode == MY_PERMISSIONS_REQUEST_COARSE_LOCATE) {
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                locate();
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            // Check for all permissions
+            allPermissionsGranted = true;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allPermissionsGranted = false;
+                    break;
+                }
             }
         }
     }
 
     @SuppressLint("MissingPermission")
     private void locate() {
-        Log.v("Yfebo", "Locate");
+        Log.v("YYfebo", "Locate");
         fusedLocationClient.getCurrentLocation(PRIORITY_LOW_POWER, null)
                 .addOnSuccessListener(this, new OnSuccessListener<Location>() {
                     @Override
                     public void onSuccess(Location location) {
                         if (location != null) {
-                            Log.v("Yfebo", "Location GET");
+                            Log.v("YYfebo", "Location GET " + location);
                             Geocoder geocoder = new Geocoder(context, Locale.getDefault());
                             try {
                                 List<Address> addresses = geocoder.getFromLocation(
                                         location.getLatitude(), location.getLongitude(), 1);
-                                cityName = addresses.get(0).getAddressLine(0);
+                                cityName = addresses.get(0).getLocality();
                             } catch (IOException e) { throw new RuntimeException(e); }
                         }
                     }
                 });
 
+    }
+
+    @Override
+    public void onBackPressed() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage("Are you sure you want to exit?");
+        builder.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) { dialog.dismiss(); finish(); }
+        });
+
+        builder.setNegativeButton("No", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) { dialog.dismiss(); }
+        });
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
     }
 }
